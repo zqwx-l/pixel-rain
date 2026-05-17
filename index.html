@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Pixel Rain - Matrix Animation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+        #controls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.85);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 12px 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+        .btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .btn:active {
+            transform: scale(0.95);
+            background: rgba(255, 255, 255, 0.15);
+        }
+        .btn.active {
+            border-color: currentColor;
+            box-shadow: 0 0 10px currentColor;
+        }
+        #theme-btn { color: #00ff41; }
+        #speed-btn { color: #00d4ff; }
+        #density-btn { color: #ff6b00; }
+        #pause-btn { color: #ff00ff; }
+        #info {
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 11px;
+            z-index: 100;
+            pointer-events: none;
+        }
+        #title {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 24px;
+            text-align: center;
+            z-index: 50;
+            pointer-events: none;
+            opacity: 1;
+            transition: opacity 2s;
+        }
+        #title span {
+            display: block;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 8px;
+        }
+        .hidden { opacity: 0 !important; }
+    </style>
+</head>
+<body>
+    <canvas id="rain"></canvas>
+    
+    <div id="title">
+        🌧️ PIXEL RAIN
+        <span>Tap anywhere to start</span>
+    </div>
+
+    <div id="info">
+        <span id="fps-display">60 FPS</span> | 
+        <span id="theme-display">Matrix Green</span>
+    </div>
+
+    <div id="controls">
+        <button class="btn" id="theme-btn">🎨 Theme</button>
+        <button class="btn" id="speed-btn">⚡ Speed: 5</button>
+        <button class="btn" id="density-btn">🌧️ Dense</button>
+        <button class="btn" id="pause-btn">⏸️ Pause</button>
+    </div>
+
+    <script>
+    (() => {
+        const canvas = document.getElementById('rain');
+        const ctx = canvas.getContext('2d');
+
+        // ─── Characters ──────────────────────────────────────────────
+        const KATAKANA = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
+        const DIGITS = '0123456789';
+        const SYMBOLS = '!@#$%^&*()_+-=[]{}|;:<>?/~';
+        const ALL_CHARS = KATAKANA + DIGITS + SYMBOLS;
+
+        // ─── Themes ──────────────────────────────────────────────────
+        const THEMES = [
+            { name: 'Matrix Green', head: '#ffffff', bright: '#00ff41', mid: '#00cc33', dim: '#006622', fade: '#003311' },
+            { name: 'Cyberpunk', head: '#ffffff', bright: '#00ffff', mid: '#00cccc', dim: '#006666', fade: '#330066' },
+            { name: 'Blood Rain', head: '#ffffff', bright: '#ff3333', mid: '#cc0000', dim: '#660000', fade: '#330000' },
+            { name: 'Golden', head: '#ffffff', bright: '#ffdd00', mid: '#ccaa00', dim: '#665500', fade: '#332200' },
+            { name: 'Purple Haze', head: '#ffffff', bright: '#ff00ff', mid: '#cc00cc', dim: '#660066', fade: '#000066' },
+            { name: 'Ocean', head: '#ffffff', bright: '#00aaff', mid: '#0077cc', dim: '#004488', fade: '#002244' },
+            { name: 'Toxic', head: '#ffffff', bright: '#aaff00', mid: '#88cc00', dim: '#446600', fade: '#223300' },
+        ];
+
+        // ─── State ───────────────────────────────────────────────────
+        let themeIdx = 0;
+        let speed = 5;
+        let density = 0.7;
+        let paused = false;
+        let drops = [];
+        let cols, rows, fontSize;
+        let lastTime = 0;
+        let frameCount = 0;
+        let fpsTime = 0;
+        let currentFps = 60;
+        let started = false;
+
+        // ─── Setup ───────────────────────────────────────────────────
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            fontSize = window.innerWidth < 500 ? 14 : 16;
+            cols = Math.floor(canvas.width / fontSize);
+            rows = Math.floor(canvas.height / fontSize);
+            initDrops();
+        }
+
+        function initDrops() {
+            const numDrops = Math.floor(cols * density);
+            drops = [];
+            for (let i = 0; i < numDrops; i++) {
+                drops.push(createDrop());
+            }
+        }
+
+        function createDrop() {
+            return {
+                x: Math.floor(Math.random() * cols),
+                y: Math.random() * -50,
+                speed: 0.3 + Math.random() * 0.7,
+                length: 5 + Math.floor(Math.random() * 20),
+                chars: Array.from({ length: 25 }, () => ALL_CHARS[Math.floor(Math.random() * ALL_CHARS.length)]),
+                mutateTimer: 0,
+            };
+        }
+
+        // ─── Render ──────────────────────────────────────────────────
+        function draw(timestamp) {
+            if (!started) {
+                requestAnimationFrame(draw);
+                return;
+            }
+
+            // FPS counter
+            frameCount++;
+            if (timestamp - fpsTime >= 1000) {
+                currentFps = frameCount;
+                frameCount = 0;
+                fpsTime = timestamp;
+                document.getElementById('fps-display').textContent = currentFps + ' FPS';
+            }
+
+            if (paused) {
+                requestAnimationFrame(draw);
+                return;
+            }
+
+            const delta = timestamp - lastTime;
+            if (delta < (1000 / 60)) {
+                requestAnimationFrame(draw);
+                return;
+            }
+            lastTime = timestamp;
+
+            const theme = THEMES[themeIdx];
+
+            // Fade effect
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.font = `${fontSize}px 'Courier New', monospace`;
+
+            const speedMult = speed / 5;
+
+            for (let drop of drops) {
+                // Mutate characters
+                drop.mutateTimer++;
+                if (drop.mutateTimer > 3) {
+                    drop.mutateTimer = 0;
+                    const idx = Math.floor(Math.random() * drop.chars.length);
+                    drop.chars[idx] = ALL_CHARS[Math.floor(Math.random() * ALL_CHARS.length)];
+                }
+
+                // Draw trail
+                for (let i = 0; i < drop.length; i++) {
+                    const row = Math.floor(drop.y) - i;
+                    if (row < 0 || row >= rows) continue;
+
+                    const charIdx = i % drop.chars.length;
+                    const px = drop.x * fontSize;
+                    const py = row * fontSize;
+
+                    let color;
+                    if (i === 0) {
+                        color = theme.head;
+                        ctx.shadowBlur = 8;
+                        ctx.shadowColor = theme.bright;
+                    } else if (i < 3) {
+                        color = theme.bright;
+                        ctx.shadowBlur = 4;
+                        ctx.shadowColor = theme.bright;
+                    } else if (i < drop.length * 0.5) {
+                        color = theme.mid;
+                        ctx.shadowBlur = 0;
+                    } else if (i < drop.length * 0.8) {
+                        color = theme.dim;
+                        ctx.shadowBlur = 0;
+                    } else {
+                        color = theme.fade;
+                        ctx.shadowBlur = 0;
+                    }
+
+                    ctx.fillStyle = color;
+                    ctx.fillText(drop.chars[charIdx], px, py);
+                }
+                ctx.shadowBlur = 0;
+
+                // Move drop
+                drop.y += drop.speed * speedMult;
+
+                // Reset if off screen
+                if (drop.y - drop.length > rows) {
+                    drop.x = Math.floor(Math.random() * cols);
+                    drop.y = Math.random() * -10;
+                    drop.speed = 0.3 + Math.random() * 0.7;
+                    drop.length = 5 + Math.floor(Math.random() * 20);
+                }
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        // ─── Controls ────────────────────────────────────────────────
+        document.getElementById('theme-btn').addEventListener('click', () => {
+            themeIdx = (themeIdx + 1) % THEMES.length;
+            const theme = THEMES[themeIdx];
+            document.getElementById('theme-display').textContent = theme.name;
+            document.getElementById('theme-btn').style.color = theme.bright;
+        });
+
+        document.getElementById('speed-btn').addEventListener('click', () => {
+            speed = speed >= 9 ? 1 : speed + 1;
+            document.getElementById('speed-btn').textContent = `⚡ Speed: ${speed}`;
+        });
+
+        document.getElementById('density-btn').addEventListener('click', () => {
+            if (density >= 1.0) density = 0.3;
+            else if (density >= 0.7) density = 1.0;
+            else density = 0.7;
+            const labels = { 0.3: 'Sparse', 0.7: 'Dense', 1.0: 'Heavy' };
+            document.getElementById('density-btn').textContent = `🌧️ ${labels[density]}`;
+            initDrops();
+        });
+
+        document.getElementById('pause-btn').addEventListener('click', () => {
+            paused = !paused;
+            document.getElementById('pause-btn').textContent = paused ? '▶️ Play' : '⏸️ Pause';
+            document.getElementById('pause-btn').classList.toggle('active', paused);
+        });
+
+        // Start on tap
+        document.addEventListener('click', () => {
+            if (!started) {
+                started = true;
+                document.getElementById('title').classList.add('hidden');
+            }
+        }, { once: false });
+
+        // Touch swipe for theme change
+        let touchStartX = 0;
+        document.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+        });
+        document.addEventListener('touchend', (e) => {
+            const diff = e.changedTouches[0].clientX - touchStartX;
+            if (Math.abs(diff) > 80) {
+                themeIdx = (themeIdx + (diff > 0 ? 1 : THEMES.length - 1)) % THEMES.length;
+                document.getElementById('theme-display').textContent = THEMES[themeIdx].name;
+                document.getElementById('theme-btn').style.color = THEMES[themeIdx].bright;
+            }
+        });
+
+        // ─── Init ────────────────────────────────────────────────────
+        window.addEventListener('resize', resize);
+        resize();
+        requestAnimationFrame(draw);
+    })();
+    </script>
+</body>
+</html>

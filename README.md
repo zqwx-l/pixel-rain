@@ -22,13 +22,24 @@ Matrix-style digital rain animation in your terminal. Pure Python, zero dependen
 
 ## 🚀 Quick Start
 
+### 🌐 Web Version (Mobile/Desktop)
+
+**Play online:** [https://zqwx-l.github.io/pixel-rain](https://zqwx-l.github.io/pixel-rain)
+
+Or run locally:
+```bash
+git clone https://github.com/zqwx-l/pixel-rain.git
+cd pixel-rain
+# Open index.html in your browser
+```
+
+### 💻 Terminal Version (CLI)
+
 ```bash
 git clone https://github.com/zqwx-l/pixel-rain.git
 cd pixel-rain
 python3 pixel_rain.py
 ```
-
-That's it. No `pip install`, no setup, no config.
 
 ## 🎮 Controls
 
